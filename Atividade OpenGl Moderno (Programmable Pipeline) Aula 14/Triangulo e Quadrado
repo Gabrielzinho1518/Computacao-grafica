@@ -1,0 +1,428 @@
+# Este exemplo apresenta uma aplicação completa de OpenGL, que renderiza um triângulo na tela.
+import glfw
+from OpenGL.GL import *
+import OpenGL.GL.shaders
+import numpy as np
+
+Window = None
+Shader_programm = None
+Vao1 = None
+Vao2 = None
+Vao_quadrado = None
+Vao_triangulo = None
+
+Shader_programm_quadrado = None
+Shader_programm_triangulo = None
+WIDTH = 1000
+HEIGHT = 800
+
+#Função callback que é executada sempre que a janela for redimensionada
+#Sempre que a tela for redimensionada, salvamos sua nova largura e altura nas variáveis globais acima
+def redimensionaCallback(window, w, h):
+    global WIDTH, HEIGHT
+    WIDTH = w
+    HEIGHT = h
+
+def inicializaOpenGL():
+    global Window, WIDTH, HEIGHT
+
+    #Inicializa GLFW
+    glfw.init()
+
+    #Criação de uma janela
+    Window = glfw.create_window(WIDTH, HEIGHT, "Exemplo - renderização de um triângulo", None, None)
+    #Caso não seja possível criar a janela, a GLFW e a aplicação são terminadas
+    if not Window:
+        glfw.terminate()
+        exit()
+
+    #Registramos a função "redimensionaCallback" como sendo a função de redimensionamento
+	#Isso significa que a função "redimensionaCallback" será chamada sempre que a janela for redimensionada,
+	#seja pelo sistema ou pelo usuário
+    glfw.set_window_size_callback(Window, redimensionaCallback)
+
+    #Define o contexto atual do GLFW como sendo a janela criada acima. O contexto define
+	#em qual janela o OpenGL irá funcionar, o que é essencial para que o programa funcione
+    glfw.make_context_current(Window)
+
+    #Buscamos informações a respeito do hardware (placa de vídeo) e a versão do OpenGL que a mesma da suporte
+    print("Placa de vídeo: ",OpenGL.GL.glGetString(OpenGL.GL.GL_RENDERER))
+    print("Versão do OpenGL: ",OpenGL.GL.glGetString(OpenGL.GL.GL_VERSION))
+
+def inicializaObjetos():
+
+    global Vao1, Vao2
+
+    # =========================
+    # TRIÂNGULO 1
+    # =========================
+
+    Vao1 = glGenVertexArrays(1)
+    glBindVertexArray(Vao1)
+
+    pontos1 = [
+        -0.8,  0.5, 0.0,
+        -0.3, -0.5, 0.0,
+        -1.0, -0.5, 0.0
+    ]
+
+    cores1 = [
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+    ]
+
+    pontos1 = np.array(pontos1, dtype=np.float32)
+    cores1 = np.array(cores1, dtype=np.float32)
+
+    # VBO pontos
+    vbo1 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo1)
+    glBufferData(GL_ARRAY_BUFFER, pontos1, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+    # VBO cores
+    vbo2 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo2)
+    glBufferData(GL_ARRAY_BUFFER, cores1, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+    # =========================
+    # TRIÂNGULO 2
+    # =========================
+
+    Vao2 = glGenVertexArrays(1)
+    glBindVertexArray(Vao2)
+
+    pontos2 = [
+         0.3,  0.5, 0.0,
+         0.8, -0.5, 0.0,
+         0.0, -0.5, 0.0
+    ]
+
+    cores2 = [
+        1.0, 1.0, 0.0,
+        1.0, 0.0, 1.0,
+        0.0, 1.0, 1.0
+    ]
+
+    pontos2 = np.array(pontos2, dtype=np.float32)
+    cores2 = np.array(cores2, dtype=np.float32)
+
+    # VBO pontos
+    vbo3 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo3)
+    glBufferData(GL_ARRAY_BUFFER, pontos2, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+    # VBO cores
+    vbo4 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo4)
+    glBufferData(GL_ARRAY_BUFFER, cores2, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+def inicializaShaders():
+    
+    global Shader_programm
+    # ========================================================
+    # Especificação do Shader_programm
+    # ========================================================
+    #
+    # - O Vertex Shader é responsável por processar cada vértice
+    #   do objeto e definir sua posição final na tela
+    #
+    # - A linha "#version 400" define que estamos utilizando
+    #   a versão 4.0 da GLSL
+    #
+    # - "layout(location = 0)" define que este atributo receberá
+    #   os dados da posição enviados pelo Python
+    #
+    # - "layout(location = 1)" define que este atributo receberá
+    #   os dados das cores enviados pelo Python
+    #
+    # - "in" significa variável de entrada do shader
+    #
+    # - "vec3" significa vetor com 3 valores:
+    #   x,y,z ou r,g,b
+    #
+    # - "out vec3 cores" envia os dados de cor
+    #   para o Fragment Shader
+    #
+    # - gl_Position define a posição final do vértice
+    #
+    # - gl_Position deve obrigatoriamente ser um vec4,
+    #   por isso adicionamos o valor 1.0 ao final
+    # representando a coordenada W que é utilizada para transformações de perspectiva
+    # O W é um valor que é utilizado para realizar transformações de perspectiva, ou seja, para simular a profundidade dos objetos na cena.
+    # Ele é utilizado para transformar as coordenadas do espaço 3D para o espaço 2D da tela, permitindo que objetos mais distantes
+    # pareçam menores do que objetos mais próximos.
+    # No caso deste exemplo, como estamos renderizando um triângulo simples sem nenhuma transformação de perspectiva,
+    # podemos simplesmente definir o valor de W como 1.0.
+    vertex_shader = """
+         #version 400
+
+        // atributo posição
+        layout(location = 0) in vec3 vertex_posicao;
+        // atributo cor
+        layout(location = 1) in vec3 vertex_cores;
+        // saída para o fragment shader
+        out vec3 cores;
+
+        void main () {
+
+            // envia a cor para o fragment shader
+            cores = vertex_cores;
+
+            // posição final do vértice
+            gl_Position = vec4(vertex_posicao.x,vertex_posicao.y,vertex_posicao.z,1.0);
+        }
+    """
+ 
+    # Como shaders são programas executados pela GPU,
+    # precisamos compilá-los e verificar se não ocorreu nenhum erro
+    vs = OpenGL.GL.shaders.compileShader(vertex_shader, GL_VERTEX_SHADER)
+    if not glGetShaderiv(vs, GL_COMPILE_STATUS):
+        infoLog = glGetShaderInfoLog(vs, 512, None)
+        print("Erro no vertex shader:\n", infoLog)
+
+    # Especificação do Fragment Shader:
+    #   # - o Fragment Shader é responsável por determinar
+    #   a cor final de cada fragmento (pixel) do objeto
+    # - a primeira linha especifica a versão da GLSL
+    #   que estamos utilizando, no caso, 4.0.0
+    #
+    # - "in vec3 cores" recebe as cores enviadas
+    #   pelo Vertex Shader
+    #
+    # - a variável frag_colour define a cor final
+    #   do fragmento
+    #
+    # - neste exemplo, utilizamos as cores vindas
+    #   dos vértices do objeto
+    #
+    # - o valor 1.0 representa opacidade total
+    #   (sem transparência)
+    fragment_shader = """
+        #version 400
+        in vec3 cores;
+		out vec4 frag_colour;
+		void main () {
+		    frag_colour = vec4 (cores.r, cores.g, cores.b, 1.0);
+		}
+    """
+    # Do mesmo modo que o vertex shader, precisamos compilar o fragment shader e verificar se não houve nenhum erro de compilação
+    fs = OpenGL.GL.shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER)
+    if not glGetShaderiv(fs, GL_COMPILE_STATUS):
+        infoLog = glGetShaderInfoLog(fs, 512, None)
+        print("Erro no fragment shader:\n", infoLog)
+
+    # Especificação do Shader Programm:
+	# Após compilarmos os shaders, precisamos combiná-los em um único programa, denominado GPU Shader Program.
+	# Para isso, chamamos a função compileProgram passando os dois shaders que irão formar o nosso shader program
+    # e testamos se não houve nenhum erro de linkagem
+    Shader_programm = OpenGL.GL.shaders.compileProgram(vs, fs)
+    if not glGetProgramiv(Shader_programm, GL_LINK_STATUS):
+        infoLog = glGetProgramInfoLog(Shader_programm, 512, None)
+        print("Erro na linkagem do shader:\n", infoLog)
+
+    glDeleteShader(vs)
+    glDeleteShader(fs)
+
+def inicializaRenderizacao():
+
+    global Window
+
+    while not glfw.window_should_close(Window):
+
+        glClear(GL_COLOR_BUFFER_BIT)
+        glClearColor(0.2, 0.3, 0.3, 1.0)
+
+        # QUADRADO
+        glUseProgram(Shader_programm_quadrado)
+        glBindVertexArray(Vao_quadrado)
+        glDrawArrays(GL_TRIANGLES, 0, 6)
+
+        # TRIÂNGULO
+        glUseProgram(Shader_programm_triangulo)
+        glBindVertexArray(Vao_triangulo)
+        glDrawArrays(GL_TRIANGLES, 0, 3)
+
+        glfw.poll_events()
+        glfw.swap_buffers(Window)
+
+    glfw.terminate()
+def inicializaShaderQuadrado():
+
+    global Shader_programm_quadrado
+
+    vertex_shader = """
+    #version 400
+
+    layout(location = 0) in vec3 vertex_posicao;
+    layout(location = 1) in vec3 vertex_cores;
+
+    out vec3 cores;
+
+    void main() {
+        cores = vertex_cores;
+        gl_Position = vec4(vertex_posicao, 1.0);
+    }
+    """
+
+    fragment_shader = """
+    #version 400
+
+    in vec3 cores;
+    out vec4 frag_colour;
+
+    void main() {
+        frag_colour = vec4(cores, 1.0);
+    }
+    """
+
+    vs = OpenGL.GL.shaders.compileShader(vertex_shader, GL_VERTEX_SHADER)
+    fs = OpenGL.GL.shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER)
+
+    Shader_programm_quadrado = OpenGL.GL.shaders.compileProgram(vs, fs)
+def inicializaShaderTriangulo():
+
+    global Shader_programm_triangulo
+
+    vertex_shader = """
+    #version 400
+
+    layout(location = 0) in vec3 vertex_posicao;
+    layout(location = 1) in vec3 vertex_cores;
+
+    out vec3 cores;
+
+    void main() {
+        cores = vertex_cores;
+        gl_Position = vec4(vertex_posicao, 1.0);
+    }
+    """
+
+    fragment_shader = """
+    #version 400
+
+    in vec3 cores;
+    out vec4 frag_colour;
+
+    void main() {
+        frag_colour = vec4(cores, 1.0);
+    }
+    """
+
+    vs = OpenGL.GL.shaders.compileShader(vertex_shader, GL_VERTEX_SHADER)
+    fs = OpenGL.GL.shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER)
+
+    Shader_programm_triangulo = OpenGL.GL.shaders.compileProgram(vs, fs)
+
+def inicializaTriangulo():
+
+    global Vao_triangulo
+
+    Vao_triangulo = glGenVertexArrays(1)
+    glBindVertexArray(Vao_triangulo)
+
+    pontos = [
+         0.2,  0.5, 0.0,
+         0.8, -0.5, 0.0,
+        -0.0, -0.5, 0.0
+    ]
+
+    cores = [
+        1.0, 0.5, 0.0,
+        0.0, 1.0, 0.5,
+        0.5, 0.0, 1.0
+    ]
+
+    pontos = np.array(pontos, dtype=np.float32)
+    cores = np.array(cores, dtype=np.float32)
+
+    # VBO pontos
+    vbo1 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo1)
+    glBufferData(GL_ARRAY_BUFFER, pontos, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+    # VBO cores
+    vbo2 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo2)
+    glBufferData(GL_ARRAY_BUFFER, cores, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+def inicializaQuadrado():
+
+    global Vao_quadrado
+
+    Vao_quadrado = glGenVertexArrays(1)
+    glBindVertexArray(Vao_quadrado)
+
+    pontos = [
+        # TRIÂNGULO 1
+        -0.9,  0.5, 0.0,
+        -0.1,  0.5, 0.0,
+        -0.9, -0.5, 0.0,
+
+        # TRIÂNGULO 2
+        -0.1,  0.5, 0.0,
+        -0.1, -0.5, 0.0,
+        -0.9, -0.5, 0.0
+    ]
+
+    cores = [
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+
+        1.0, 1.0, 0.0,
+        1.0, 0.0, 1.0,
+        0.0, 1.0, 1.0
+    ]
+
+    pontos = np.array(pontos, dtype=np.float32)
+    cores = np.array(cores, dtype=np.float32)
+
+    # VBO pontos
+    vbo1 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo1)
+    glBufferData(GL_ARRAY_BUFFER, pontos, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, None)
+
+    # VBO cores
+    vbo2 = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo2)
+    glBufferData(GL_ARRAY_BUFFER, cores, GL_STATIC_DRAW)
+
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, None)
+# Função principal
+def main():
+
+    inicializaOpenGL()
+
+    inicializaQuadrado()
+    inicializaTriangulo()
+
+    inicializaShaderQuadrado()
+    inicializaShaderTriangulo()
+
+    inicializaRenderizacao()
+
+if __name__ == "__main__":
+    main()
